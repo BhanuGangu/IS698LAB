@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sign Up</title>
+    <style>
+        body {
+            background-image: url('https://cdn2.vectorstock.com/i/1000x1000/31/56/amazon-logo-vector-39773156.jpg');
+            background-repeat: no-repeat;
+            background-size: cover;
+	    background-color: #91F2E6;
+        }
+        h1 {
+            color: #8c449e;
+            font-size: 36px;
+            text-align: center;
+        }
+        form {
+            background-color: #ede4f2;
+            padding: 20px;
+            border-radius: 10px;
+            width: 500px;
+            margin: 0 auto;
+        }
+        input[type="text"], input[type="gender"], input[type="email"], input[type="tel"], input[type="submit"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-top: 6px;
+            margin-bottom: 16px;
+        }
+        input[type="submit"] {
+            background-color: #eb5713;
+            color: #13ebe4;
+            font-weight: bold;
+        }
+        span {
+            display: block;
+            text-align: center;
+            color: #eb1313;
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Customer Information Form</h1>
+    <form action="submit.php" method="post">
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" required>
+<br><br>
+	<label for="gender">Gender:</label>
+        <input type="radio" id="male" name="gender" value="male" required>
+	<label for="male">Male</label>
+
+	<input type="radio" id="female" name="gender" value="female" required>
+	<label for="female">Female</label>
+
+	<input type="radio" id="other" name="gender" value="other" required>
+	<label for="other">Other</label>
+  
+<br><br><br>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required>
+
+<br><br>
+        <label for="phone">Phone:</label>
+        <input type="tel" id="phone" name="phone" required><br><br>
+        <input type="submit" value="Sign Up">
+    </form>
+	<br><br><br><br>
+    <span>AWS project by AVinash Reddy Thipparthi</span><br><br>
+</body>
+</html>
