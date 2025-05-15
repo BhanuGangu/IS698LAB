@@ -1,0 +1,382 @@
+provider "aws" {
+  region = "us-east-1"
+}
+
+# VPC
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "MyVPC"
+  }
+}
+
+# Internet Gateway
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "MyIGW"
+  }
+}
+
+# Public Subnets
+resource "aws_subnet" "public1" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "PublicSubnet1"
+  }
+}
+
+resource "aws_subnet" "public2" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[1]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "PublicSubnet2"
+  }
+}
+
+# Private Subnets
+resource "aws_subnet" "private1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.10.0/24"
+  availability_zone = data.aws_availability_zones.available.names[0]
+
+  tags = {
+    Name = "PrivateSubnet1"
+  }
+}
+
+resource "aws_subnet" "private2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.11.0/24"
+  availability_zone = data.aws_availability_zones.available.names[1]
+
+  tags = {
+    Name = "PrivateSubnet2"
+  }
+}
+
+# Elastic IP for NAT Gateway
+resource "aws_eip" "nat_eip" {
+  vpc = true
+  depends_on = [aws_internet_gateway.igw]
+}
+
+# NAT Gateway in PublicSubnet2
+resource "aws_nat_gateway" "natgw" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.public2.id
+
+  tags = {
+    Name = "NATGateway"
+  }
+}
+
+# Route Table for Public Subnets
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "PublicRouteTable"
+  }
+}
+
+resource "aws_route" "public_internet_access" {
+  route_table_id         = aws_route_table.public.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.igw.id
+}
+
+resource "aws_route_table_association" "public1_assoc" {
+  subnet_id      = aws_subnet.public1.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "public2_assoc" {
+  subnet_id      = aws_subnet.public2.id
+  route_table_id = aws_route_table.public.id
+}
+
+# Route Table for Private Subnets
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "PrivateRouteTable"
+  }
+}
+
+resource "aws_route" "private_natgw_access" {
+  route_table_id         = aws_route_table.private.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.natgw.id
+}
+
+resource "aws_route_table_association" "private1_assoc" {
+  subnet_id      = aws_subnet.private1.id
+  route_table_id = aws_route_table.private.id
+}
+
+resource "aws_route_table_association" "private2_assoc" {
+  subnet_id      = aws_subnet.private2.id
+  route_table_id = aws_route_table.private.id
+}
+
+# Security Group for Jump Server
+resource "aws_security_group" "jump_sg" {
+  name        = "JumpServerSG"
+  description = "Allow SSH from my IP"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description      = "SSH from user IP"
+    from_port        = 22
+    to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = [var.allowed_ssh_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "JumpServerSG"
+  }
+}
+
+# Security Group for Web Servers
+resource "aws_security_group" "web_sg" {
+  name        = "WebServerSG"
+  description = "Allow HTTP and SSH from JumpServerSG"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "HTTP from anywhere"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description               = "SSH from Jump Server"
+    from_port                 = 22
+    to_port                   = 22
+    protocol                  = "tcp"
+    security_groups           = [aws_security_group.jump_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "WebServerSG"
+  }
+}
+
+# Security Group for RDS DB
+resource "aws_security_group" "db_sg" {
+  name        = "DBSecurityGroup"
+  description = "Allow MySQL from Web Servers"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "MySQL from Web Servers"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.web_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "DBSecurityGroup"
+  }
+}
+
+# EC2 Instances
+
+variable "key_name" {
+  description = "EC2 key pair name"
+  type        = string
+  default     = "my-key-pair" # Replace with your key pair name
+}
+
+# Data source for latest Amazon Linux 2 AMI in us-east-1
+data "aws_ami" "amazon_linux_2" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["amazon"]
+}
+
+# Jump Server in PublicSubnet1
+resource "aws_instance" "jump_server" {
+  ami                         = data.aws_ami.amazon_linux_2.id
+  instance_type               = "t2.micro"
+  key_name                   = var.key_name
+  subnet_id                   = aws_subnet.public1.id
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.jump_sg.id]
+
+  tags = {
+    Name = "JumpServer"
+  }
+}
+
+# Web Server 1 in PrivateSubnet1
+resource "aws_instance" "web_server1" {
+  ami                    = data.aws_ami.amazon_linux_2.id
+  instance_type          = "t2.micro"
+  key_name               = var.key_name
+  subnet_id              = aws_subnet.private1.id
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+
+  tags = {
+    Name = "WebServer1"
+  }
+}
+
+# Web Server 2 in PrivateSubnet2
+resource "aws_instance" "web_server2" {
+  ami                    = data.aws_ami.amazon_linux_2.id
+  instance_type          = "t2.micro"
+  key_name               = var.key_name
+  subnet_id              = aws_subnet.private2.id
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+
+  tags = {
+    Name = "WebServer2"
+  }
+}
+
+# RDS Subnet Group
+resource "aws_db_subnet_group" "main" {
+  name       = "db-subnet-group"
+  subnet_ids = [aws_subnet.private1.id, aws_subnet.private2.id]
+
+  tags = {
+    Name = "DBSubnetGroup"
+  }
+}
+
+variable "rds_password" {
+  description = "RDS master password"
+  type        = string
+  sensitive   = true
+}
+
+# RDS MySQL Instance
+resource "aws_db_instance" "mysql" {
+  allocated_storage    = 20
+  engine               = "mysql"
+  engine_version       = "8.0"
+  instance_class       = "db.t3.micro"
+  name                 = "mydatabase"
+  username             = "adminuser"
+  password             = var.rds_password
+  db_subnet_group_name = aws_db_subnet_group.main.name
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+  publicly_accessible  = false
+  multi_az             = false
+  storage_type         = "gp2"
+  backup_retention_period = 7
+
+  tags = {
+    Name = "MySQLDB"
+  }
+}
+
+# S3 Bucket
+resource "aws_s3_bucket" "mybucket" {
+  bucket = "my-unique-bucket-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
+
+  acl    = "private"
+
+  tags = {
+    Name = "MyS3Bucket"
+  }
+}
+
+# CloudFront Distribution
+resource "aws_cloudfront_distribution" "cf_dist" {
+  origin {
+    domain_name = aws_s3_bucket.mybucket.bucket_regional_domain_name
+    origin_id   = "S3Origin"
+
+    s3_origin_config {
+      origin_access_identity = ""
+    }
+  }
+
+  enabled             = true
+  default_root_object = "index.html"
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "S3Origin"
+
+    forwarded_values {
+      query_string = false
+
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  tags = {
+    Name = "MyCloudFrontDistribution"
+  }
+}
+
+# Data sources for account ID and AZs
+data "aws_caller_identity" "current" {}
+
+data "aws_availability_zones" "available" {}
