@@ -30,7 +30,7 @@ This project demonstrates a secure, scalable, and modular AWS infrastructure usi
 ## 🛠️ Deployment Options
 
 ### 1. Terraform
-You can find the Terraform files in the [`terraform/`](./terraform) directory.
+You can find the Terraform files in the [`terraform/`](./terraform-courseproject) directory.
 
 #### Deploy using Terraform:
 ```bash
