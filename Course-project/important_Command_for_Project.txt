@@ -1,0 +1,288 @@
+
+Pre-Req: Create a VPC with 2 Pubolic Subnets, 2 Private for APP and 2 private for DB Subnets.
+
+Capstone Project: 
+
+
+Step 1 : Create an S3 bucket, upload couple of video files. Create cloudfront distribution to deliver this videos via edge location.
+
+Step 2 : create required ec2 instance in custom VPC Public Subnet, connect to it and configure it to access RDS, EFS.
+
+Create 4 Security groups
+1. App servers : ssh, http
+2. for ELB : http and https
+3. RDS : mysql
+4. EFS : nfs
+
+Step 3 : Create a mysql RDS DB, use DB subnets only (subnet group), Make sure it has connectivity to web servers.
+
+Step 4 : Connect to your ec2 instance, then connect to RDS DB, Create Required database, table and users.
+
+Step 5 ; install required packages, enable http to https redirection, then test php.
+
+Step 6 : Modify web content submit files with your rds cluster, username, pwd and db.
+
+Step 7 : Mount efs to /var/www/html/ path, make it perm mount.
+
+Step 8 : upload all files to s3 bucket, then copy it to /var/www/html/ path.
+
+Step 9 : Pick your ec2 instance public IP, and access the webpage, enter some info, it should store in backend rds db. Connect to DB and verify entries.
+
+Step 10 ; Stop ec2 instance, create a GoldenAMI of this instance
+
+step 11 : create a targetgroup and Load balancer
+
+Step 12 : Create a Launch Template, then create an ASG. 
+
+
+
+
+1. Launch an ec2 instance (Launch Amazon Linux 2) 
+2. Launch rds cluster 
+3. Configure ec2 instance to connect to rds
+
+
+yum install httpd -y
+service httpd start
+chkconfig httpd on
+
+
+Install mysql client
+
+==> sudo yum install -y mysql
+
+Export mysql endpoint with below command.
+export MYSQL_HOST=<your-endpoint>
+
+export MYSQL_HOST=capstone.cfpgnjehw330.ap-south-1.rds.amazonaws.com
+
+
+--
+Connect to mysql to create a db user
+
+mysql -h capstone.cfpgnjehw330.ap-south-1.rds.amazonaws.com -P 3306 -u dbadmin -p
+
+--
+
+CREATE DATABASE capstone;
+
+CREATE TABLE capstone.customers (
+    id INT(11) NOT NULL AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    gender VARCHAR(50) NOT NULL,
+    email VARCHAR(50) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE USER 'capstoneuser' IDENTIFIED BY 'Avinash12345';
+GRANT ALL PRIVILEGES ON capstone.* TO capstoneuser;
+FLUSH PRIVILEGES;
+Exit
+
+--
+
+Install required dependencies:
+
+==> sudo amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+
+==> service httpd restart
+--
+
+--> Create an "EFS", Mount it to your ec2 instance, Mount it to /var/www/html/ path.
+--> ** Make it permanent mount *
+
+
+sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport fs-090cc9ec2fad642fa.efs.ap-south-1.amazonaws.com:/ /var/www/html/
+
+write entry to /etc/fstab, get the entry info from /etc/mtab file.
+
+fs-090cc9ec2fad642fa.efs.ap-south-1.amazonaws.com:/ /var/www/html nfs4 rw,relatime,vers=4.1,rsize=1048576,wsize=1048576,namlen=255,hard,noresvport,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=192.168.0.111,local_lock=none,addr=192.168.1.48 0 0
+
+
+--
+
+cd /var/www/html/
+
+vim "info.php" and write below code/command to "info.php" file, save and close
+
+<?php phpinfo(); ?>
+
+
+
+In your JUMP Server, Open browser and enter "INSTANCE-private-IP/info.php", this should display all php config information.
+
+--
+
+==> Upload the shared webconente in to s3 bucket and copy all that content to ec2 instance /var/www/html/ path.
+
+----
+
+Also, Edit files "submit.php" and "submit2.php" and replace the below content.
+
+
+** Replace 'rds-hostname', 'username', 'password', 'database'.
+
+---------
+
+IF YOU HAVE A DOMAIN NAME**
+** Configure "http to https redirection".
+Later, using Route53 map your domain Name.
+
+---------
+
+Now: Stop the Instance and Create a GOLDENAMI.
+--> Create an Application Load balancer, Run it in CustomVPC "Public SUbnet".
+
+--> Now using the GOLDENAMI and Application Load Balancer, Create an ASG.
+--> Your ec2 instances should run in "custom vpc" "app subnets".
+
+
+
+Now access http://<ELB-ENDPOINT>/ , Fill the required information and submit. Data should store in mysql mywebapp.customer database.
+
+
+--> To verify the Data storage:
+
+Connect to any ec2 instance,  connect to rds cluster and execute below sql query to view all information you submitted from the webpage you created.
+
+SELECT * from capstone.customers;
+
+Above command should show all the entries you entered so far.
+Also, Test ASG by terminating some instances.
+
+
+--> Create an Alarm when an ec2 instance terminated/stopped.
+--> Configure DLM / Data Life cycle manager to take backup every day once.
+
+SELECT * from capstone.customers;
+
+
+===================================
+
+Start from here
+
+==================================
+
+
+Step 1 : Create a VPC with 6 Subnets
+
+VPC : 2 Public Sn , 2 private SN (App), 2 private sn (DB)
+
+Create 4 Security groups.
+	1. JUMP
+	2. RDS
+	3. ELB
+	4. EC2 Web Servers
+	5. EFS
+
+Step 2 : Create a DB Subnet group, Create a RDS DB.
+
+Step 3 : Create a Jump server and configure Mysql client.
+Connect to RDS and create Required "database" and "user"
+
+Step 4 : Create an s3 bucket and upload 2 sample videos. Now, create Cloudfront distribution and deliver your video files via cloudfront.
+
+
+
+Install mysql client in Jump Server.. 
+
+==> sudo yum install -y mysql
+
+Export mysql endpoint with below command.
+export MYSQL_HOST=<your-endpoint>
+
+export MYSQL_HOST=capstone-rds-db.cfpgnjehw330.ap-south-1.rds.amazonaws.com
+
+
+--
+Connect to mysql to create a db user
+
+mysql -h capstone-rds-db.cfpgnjehw330.ap-south-1.rds.amazonaws.com -P 3306 -u dbadmin -p
+
+--
+
+CREATE DATABASE capstone;
+
+CREATE TABLE capstone.customers (
+    id INT(11) NOT NULL AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    gender VARCHAR(50) NOT NULL,
+    email VARCHAR(50) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE USER 'capstoneuser' IDENTIFIED BY 'Avinash12345';
+GRANT ALL PRIVILEGES ON capstone.* TO capstoneuser;
+FLUSH PRIVILEGES;
+Exit
+
+--
+
+Create an EFS
+
+Launch an ec2 instance in Private Subnet and  Install Apache, PHP, Mount EFS, COpy your web content  ==> 
+
+
+yum install httpd -y
+service httpd start
+chkconfig httpd on
+
+
+Install required dependencies:
+
+==> sudo amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+
+==> service httpd restart
+--
+
+--> Create an "EFS", Mount it to your ec2 instance, Mount it to /var/www/html/ path.
+--> Make it permanent mount*
+
+
+
+sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport fs-0db6d60b782385779.efs.ap-south-1.amazonaws.com:/ /var/www/html/
+
+
+
+write entry to /etc/fstab, get the entry info from /etc/mtab file.
+
+fs-0db6d60b782385779.efs.ap-south-1.amazonaws.com:/ /var/www/html nfs4 rw,relatime,vers=4.1,rsize=1048576,wsize=1048576,namlen=255,hard,noresvport,proto=tcp,timeo=600,retrans=2,sec=sys,clientaddr=192.168.0.167,local_lock=none,addr=192.168.0.189 0 0
+
+
+--
+
+cd /var/www/html/
+
+vim "info.php" and write below code/command to "info.php" file, save and close
+
+<?php phpinfo(); ?>
+
+now, Connect to your jump server and run http://webserver-private-ip.com/php.info , it should display php configuration information.
+
+
+Copy all the web content to your web server, /var/www/html/ path.
+
+-> First update submit.php and submit2.php with DB information, Update video1.html and video2.html with Cloudfront distribution s3 video URLs.
+
+-> Upload all these files to S3 bucket and copy all data to WebServer /var/www/html/ path. 
+
+-> then connect to your jump server and access/verify the web output http://webserver-privateIP/
+
+curl http://webserver-privateIP/
+
+-----
+
+Now, Configure http to https in your base ec2 instance.. 
+
+Create an SSL certificate for your domain name. 
+Create a hostedZone for your domain name.
+
+
+----
+
+-> create a load balancer (target group)
+-> Create an ASG (Launch template)
+
+----
